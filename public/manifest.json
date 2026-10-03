@@ -1,0 +1,22 @@
+{
+  "name": "CSDSIMS MAPOLY",
+  "short_name": "CSDSIMS",
+  "description": "Computer Science Department Students Information Management System - Moshood Abiola Polytechnic, Abeokuta",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#064e3b",
+  "theme_color": "#064e3b",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/mapoly-logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/mapoly-logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
