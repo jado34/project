@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState } from 'react';
 import {
   User,
   UserRole,
+  AcademicLevel,
   Course,
   Registration,
   Result,
@@ -58,6 +59,7 @@ interface AppContextType {
   currentSession: string;
   currentSemester: string;
   toasts: ToastMessage[];
+  isCleanSlate: boolean;
   // Actions
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   dismissToast: (id: string) => void;
@@ -99,11 +101,13 @@ interface AppContextType {
   toggleOfflineMaterial: (materialId: string) => void;
   getAtRiskStudents: (level?: string) => AtRiskStudent[];
   resetDemoData: () => void;
+  clearToCleanSlate: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isCleanSlate, setIsCleanSlate] = useState<boolean>(false);
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [currentUser, setCurrentUser] = useState<User>(INITIAL_USERS[0]); // Default Student
   const [courses] = useState<Course[]>(INITIAL_COURSES);
@@ -117,6 +121,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [announcements, setAnnouncements] = useState<Announcement[]>(INITIAL_ANNOUNCEMENTS);
   const [materials, setMaterials] = useState<Material[]>(INITIAL_MATERIALS);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // LocalStorage persistence for DB-less local operation
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem('csdsims_app_state');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.isCleanSlate !== undefined) setIsCleanSlate(parsed.isCleanSlate);
+        if (parsed.users?.length) {
+          setUsers(parsed.users);
+          if (parsed.currentUser) setCurrentUser(parsed.currentUser);
+        }
+        if (parsed.registrations !== undefined) setRegistrations(parsed.registrations);
+        if (parsed.results !== undefined) setResults(parsed.results);
+        if (parsed.attendanceSessions !== undefined) setAttendanceSessions(parsed.attendanceSessions);
+        if (parsed.attendanceRecords !== undefined) setAttendanceRecords(parsed.attendanceRecords);
+        if (parsed.attendanceSummaries !== undefined) setAttendanceSummaries(parsed.attendanceSummaries);
+        if (parsed.announcements !== undefined) setAnnouncements(parsed.announcements);
+        if (parsed.materials !== undefined) setMaterials(parsed.materials);
+        if (parsed.courseForms !== undefined) setCourseForms(parsed.courseForms);
+      }
+    } catch {
+      // LocalStorage unavailable
+    }
+  }, []);
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(
+        'csdsims_app_state',
+        JSON.stringify({
+          isCleanSlate,
+          users,
+          currentUser,
+          registrations,
+          results,
+          attendanceSessions,
+          attendanceRecords,
+          attendanceSummaries,
+          announcements,
+          materials,
+          courseForms,
+        })
+      );
+    } catch {
+      // Ignore localstorage quota errors
+    }
+  }, [
+    isCleanSlate,
+    users,
+    currentUser,
+    registrations,
+    results,
+    attendanceSessions,
+    attendanceRecords,
+    attendanceSummaries,
+    announcements,
+    materials,
+    courseForms,
+  ]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     const id = `toast_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -214,6 +278,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'Invalid or expired Live Session PIN.' };
     }
 
+    // STRICT COURSE ENROLLMENT CHECK:
+    // Only students who are registered & approved for this specific course can mark attendance!
+    const isEnrolled = registrations.some(
+      (r) => r.studentId === currentUser.id && r.courseId === activeSession.courseId && r.status === 'approved'
+    );
+
+    if (!isEnrolled && currentUser.role === 'student') {
+      showToast(
+        `Access Denied: You are not registered for ${activeSession.courseCode}. Only students enrolled in this course can mark attendance!`,
+        'error'
+      );
+      return {
+        success: false,
+        message: `Access Denied: You are not registered for ${activeSession.courseCode}.`,
+      };
+    }
+
     const alreadyCheckedIn = attendanceRecords.some(
       (r) => r.attendanceSessionId === activeSession.id && r.studentId === currentUser.id
     );
@@ -300,13 +381,94 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, message: `Checked in to ${activeSession.courseCode}` };
   };
 
+  const approveAllLevelCoursesForStudent = (
+    studentId: string,
+    studentLevel: AcademicLevel,
+    studentName: string,
+    matricNo: string
+  ) => {
+    const levelCourses = courses.filter((c) => c.level === studentLevel);
+
+    setRegistrations((prev) => {
+      const otherRegs = prev.filter((r) => r.studentId !== studentId);
+      const levelRegs: Registration[] = levelCourses.map((c) => ({
+        id: `reg_${studentId}_${c.id}`,
+        studentId,
+        studentName,
+        matricNo,
+        courseId: c.id,
+        courseCode: c.code,
+        courseTitle: c.title,
+        unitLoad: c.unitLoad,
+        semesterId: c.semesterId || 'sem_1',
+        status: 'approved',
+        adviserApprovedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      }));
+      return [...otherRegs, ...levelRegs];
+    });
+
+    setResults((prev) => {
+      const existingStudentResults = prev.filter((r) => r.studentId === studentId);
+      const otherResults = prev.filter((r) => r.studentId !== studentId);
+
+      const newResults: Result[] = levelCourses.map((c) => {
+        const found = existingStudentResults.find((r) => r.courseId === c.id);
+        if (found) return { ...found, status: found.status || 'Draft' };
+        return {
+          id: `res_${studentId}_${c.id}`,
+          registrationId: `reg_${studentId}_${c.id}`,
+          studentId,
+          studentName,
+          matricNo,
+          courseId: c.id,
+          courseCode: c.code,
+          courseTitle: c.title,
+          unitLoad: c.unitLoad,
+          caScore: 0,
+          examScore: 0,
+          totalScore: 0,
+          grade: 'F',
+          gradePoint: 0.0,
+          status: 'Draft',
+          lastUpdated: new Date().toISOString(),
+        };
+      });
+      return [...otherResults, ...newResults];
+    });
+
+    setAttendanceSummaries((prev) => {
+      const existingSummaries = prev.filter((s) => s.studentId === studentId);
+      const otherSummaries = prev.filter((s) => s.studentId !== studentId);
+
+      const levelSummaries: StudentAttendanceSummary[] = levelCourses.map((c) => {
+        const found = existingSummaries.find((s) => s.courseId === c.id);
+        if (found) return found;
+        return {
+          studentId,
+          courseId: c.id,
+          courseCode: c.code,
+          courseTitle: c.title,
+          totalClasses: 1,
+          attendedClasses: 1,
+          percentage: 100.0,
+          isEligible: true,
+        };
+      });
+      return [...otherSummaries, ...levelSummaries];
+    });
+  };
+
   const uploadCourseForm = (file: { name: string; size: string; url?: string }) => {
+    const studentLevel = (currentUser.level || 'ND2') as AcademicLevel;
+    const matricNo = currentUser.matricNo || 'MAPOLY/STUDENT';
+
     const newFormDoc: CourseFormDoc = {
       id: `cf_${Date.now()}`,
       studentId: currentUser.id,
       studentName: currentUser.name,
-      matricNo: currentUser.matricNo || 'MAPOLY/STUDENT',
-      level: currentUser.level || 'ND2',
+      matricNo,
+      level: studentLevel,
       fileName: file.name,
       fileSize: file.size,
       fileUrl: file.url || '#',
@@ -318,23 +480,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setCourseForms((prev) => [newFormDoc, ...prev.filter((f) => f.studentId !== currentUser.id)]);
 
-    // Instantly auto-approve all pending registrations for this student upon portal form upload
-    setRegistrations((prev) =>
-      prev.map((r) =>
-        r.studentId === currentUser.id
-          ? {
-              ...r,
-              status: 'approved',
-              adviserApprovedAt: new Date().toISOString(),
-            }
-          : r
-      )
-    );
+    // Instantly auto-register & approve ALL courses for this student's level without missing one
+    approveAllLevelCoursesForStudent(currentUser.id, studentLevel, currentUser.name, matricNo);
 
-    showToast('Official School Portal Form verified! All course registrations AUTO-APPROVED ✓', 'success');
+    const levelCourseCount = courses.filter((c) => c.level === studentLevel).length;
+    showToast(
+      `School Portal Form verified! All ${levelCourseCount} ${studentLevel} courses registered & AUTO-APPROVED ✓`,
+      'success'
+    );
   };
 
   const verifyCourseForm = (formId: string) => {
+    const targetForm = courseForms.find((f) => f.id === formId);
+    if (targetForm) {
+      approveAllLevelCoursesForStudent(
+        targetForm.studentId,
+        targetForm.level,
+        targetForm.studentName,
+        targetForm.matricNo
+      );
+    }
     setCourseForms((prev) =>
       prev.map((f) =>
         f.id === formId
@@ -720,6 +885,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetDemoData = () => {
+    setIsCleanSlate(false);
     setRegistrations(INITIAL_REGISTRATIONS);
     setResults(INITIAL_RESULTS);
     setAttendanceSessions(INITIAL_ATTENDANCE_SESSIONS);
@@ -727,7 +893,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAttendanceSummaries(INITIAL_ATTENDANCE_SUMMARY);
     setAnnouncements(INITIAL_ANNOUNCEMENTS);
     setMaterials(INITIAL_MATERIALS);
+    setCourseForms(INITIAL_COURSE_FORMS);
     showToast('System demo dataset restored', 'info');
+  };
+
+  const clearToCleanSlate = () => {
+    setIsCleanSlate(true);
+    setRegistrations([]);
+    setResults([]);
+    setAttendanceSessions([]);
+    setAttendanceRecords([]);
+    setAttendanceSummaries([]);
+    setAnnouncements([]);
+    setMaterials([]);
+    setCourseForms([]);
+    // Keep staff & admin accounts, purge dummy students
+    setUsers((prev) => prev.filter((u) => u.role !== 'student'));
+    showToast('Database & system wiped to Clean Slate mode! Ready for live users.', 'success');
   };
 
   return (
@@ -749,6 +931,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentSession: CURRENT_SESSION,
         currentSemester: CURRENT_SEMESTER,
         toasts,
+        isCleanSlate,
         showToast,
         dismissToast,
         recordAttendanceSession,
@@ -770,6 +953,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleOfflineMaterial,
         getAtRiskStudents,
         resetDemoData,
+        clearToCleanSlate,
       }}
     >
       {children}

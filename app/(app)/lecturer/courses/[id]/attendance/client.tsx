@@ -16,6 +16,7 @@ import {
   KeyRound,
   ShieldCheck,
   StopCircle,
+  Printer,
 } from 'lucide-react';
 
 export default function LecturerAttendanceClient({ params }: { params: any }) {
@@ -158,6 +159,13 @@ export default function LecturerAttendanceClient({ params }: { params: any }) {
             </button>
           )}
 
+          <button
+            onClick={() => window.print()}
+            className="px-3.5 py-2 bg-white border border-slate-border text-ink hover:bg-parchment-light font-mono text-xs font-semibold rounded shadow-sm transition-colors flex items-center gap-1.5"
+          >
+            <Printer className="w-4 h-4 text-slate-700" />
+            <span>Print Register</span>
+          </button>
           <button
             onClick={() => setAllStatus(true)}
             className="px-3.5 py-2 bg-white border border-slate-border text-ink hover:bg-parchment-light font-mono text-xs font-semibold rounded shadow-sm transition-colors"

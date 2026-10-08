@@ -3,10 +3,10 @@
 import React from 'react';
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
-import { Shield, Award, Users, BarChart3, CalendarDays, ArrowRight, ChevronRight, UserPlus } from 'lucide-react';
+import { Shield, Award, Users, BarChart3, CalendarDays, ChevronRight, UserPlus, Trash2, RefreshCw, Database } from 'lucide-react';
 
 export default function AdminDashboard() {
-  const { currentUser, results, courses } = useApp();
+  const { currentUser, results, courses, clearToCleanSlate, resetDemoData, isCleanSlate } = useApp();
   const pendingApprovals = results.filter((r) => r.status === 'Submitted');
 
   return (
@@ -24,9 +24,29 @@ export default function AdminDashboard() {
           <p className="text-white/60 text-xs font-mono">
             HOD: <span className="text-nacos-green font-bold">{currentUser.name}</span>
             {' · '}DEPT: <span className="text-nacos-green font-bold">Computer Science</span>
+            {' · '}MODE: <span className={isCleanSlate ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>{isCleanSlate ? 'Clean Slate (Live Mode)' : 'Demo Dataset Mode'}</span>
           </p>
         </div>
-        <div className="relative z-10 shrink-0">
+        <div className="relative z-10 shrink-0 flex flex-wrap items-center gap-2">
+          {isCleanSlate ? (
+            <button
+              onClick={() => resetDemoData()}
+              className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 backdrop-blur-sm transition-all border border-white/20"
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Restore Demo Data
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                if (confirm('Wipe static test data and switch to a Clean Slate for real users?')) {
+                  clearToCleanSlate();
+                }
+              }}
+              className="px-3.5 py-2.5 bg-red-600/90 hover:bg-red-600 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 shadow-lg transition-all"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Wipe to Clean Slate
+            </button>
+          )}
           <Link
             href="/admin/users"
             className="px-4 py-2.5 bg-nacos-green hover:bg-nacos-green-mid text-white font-bold text-xs rounded-xl inline-flex items-center gap-2 shadow-lg transition-all"
