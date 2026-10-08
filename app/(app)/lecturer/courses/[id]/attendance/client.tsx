@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, use } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { useApp } from '@/lib/context';
 import {
   CalendarCheck,
@@ -20,8 +21,8 @@ import {
 } from 'lucide-react';
 
 export default function LecturerAttendanceClient({ params }: { params: any }) {
-  const resolvedParams = params && typeof params.then === 'function' ? use(params) : params;
-  const courseId = (resolvedParams as any)?.id || 'crs_201';
+  const routeParams = useParams();
+  const courseId = (routeParams?.id as string) || (params?.id as string) || 'crs_201';
 
   const {
     courses,

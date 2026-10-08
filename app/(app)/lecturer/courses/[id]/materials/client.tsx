@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useState, use } from 'react';
+import React, { useState } from 'react';
+import { useParams } from 'next/navigation';
 import { useApp } from '@/lib/context';
 import { FolderPlus, Upload, FileText, CheckCircle2, FileUp, Sparkles, Trash2, Eye } from 'lucide-react';
 import { Material } from '@/lib/types';
 
 export default function LecturerMaterialsClient({ params }: { params: any }) {
-  const resolvedParams = params && typeof params.then === 'function' ? use(params) : params;
-  const courseId = (resolvedParams as any)?.id || 'crs_201';
+  const routeParams = useParams();
+  const courseId = (routeParams?.id as string) || (params?.id as string) || 'crs_201';
 
   const { materials, addMaterial, currentUser, courses, showToast } = useApp();
   const course = courses.find((c) => c.id === courseId);

@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, use, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { useApp } from '@/lib/context';
 import {
   Award,
@@ -16,8 +17,8 @@ import {
 } from 'lucide-react';
 
 export default function LecturerGradingClient({ params }: { params: any }) {
-  const resolvedParams = params && typeof params.then === 'function' ? use(params) : params;
-  const courseId = (resolvedParams as any)?.id || 'crs_201';
+  const routeParams = useParams();
+  const courseId = (routeParams?.id as string) || (params?.id as string) || 'crs_201';
 
   const { results, courses, currentUser, updateResultScores, updateResultStatus, showToast } = useApp();
   const fileInputRef = useRef<HTMLInputElement>(null);
