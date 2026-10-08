@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useRef } from 'react';
 import { useApp } from '@/lib/context';
 import { BookOpenCheck, CheckCircle2, Plus, Check, Camera, Upload, Sparkles, X, RefreshCw, Eye } from 'lucide-react';
